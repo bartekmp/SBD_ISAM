@@ -17,6 +17,7 @@ namespace ISAM
         private string _path;
         private int _pageSize;
         private bool _eof = false, _count = true;
+        private long _counter = 0;
         private int _pageSizeInBytes { get { return _pageSize * 16 + 8; } }
         private long PageByteAddress(long page)
         {
@@ -132,6 +133,18 @@ namespace ISAM
         {
             long page = number / _pageSize;
             int offset = (int)(number % _pageSize);
+            if (page == LastPageNumber)
+                return LastPage.Entries[offset];
+            var newPage = ReadPage(page);
+            if (newPage == null)
+                return null;
+            return newPage.Entries[offset];
+        }
+
+        public Tuple<long, long> ReadNextEntry()
+        {
+            long page = _counter / _pageSize;
+            int offset = (int)(_counter++ % _pageSize);
             if (page == LastPageNumber)
                 return LastPage.Entries[offset];
             var newPage = ReadPage(page);

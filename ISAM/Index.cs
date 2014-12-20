@@ -167,37 +167,45 @@ namespace ISAM
             if (address == null || address.Item1 == false)
                 return new Tuple<bool, long, long>(false, -1, -1);
 
-            var filePage = MainReader.ReadPage(address.Item2);
-            long link = 0;
-            bool overflowFlag = false; // if record has a link to OA
-
-            for (int i = filePage.Entries.Count - 1; i >= 0; i--)
+            var pageAddress = address.Item2;
+            FilePage filePage = null;
+            while ((filePage = MainReader.ReadPage(pageAddress++)) != null)
             {
-                if (filePage.Entries[i].Item1.Key == key) // if record is found
+                for (int i = filePage.Entries.Count - 1; i >= 0; i--)
                 {
-                    return new Tuple<bool, long, long>(true, filePage.Address, i);
-                }
-                if (filePage.Entries[i].Item1.Key < key && filePage.Entries[i].Item2 != -1) // if some record has overflow pointer which can possibly be given record
-                {
-                    link = filePage.Entries[i].Item2; // link to overflow
-                    overflowFlag = true;
-                    break;
+                    if (filePage.Entries[i].Item1.Key == key) // if record is found
+                    {
+                        return new Tuple<bool, long, long>(true, filePage.Address, i);
+                    }
+                    if (filePage.Entries[i].Item1.Key < key && filePage.Entries[i].Item2 != -1) // if some record has overflow pointer which can possibly be given record
+                    {
+                        var search = FindKeyInOverflowChain(filePage.Entries[i].Item2, key); // look for the key in overflow chain
+                        if (search.Item1)
+                            return search;
+                    }
                 }
             }
+            return new Tuple<bool, long, long>(false, -1, -1); // not found
+        }
 
-            if (overflowFlag)
+        private Tuple<bool, long, long> FindKeyInOverflowChain(long entry, long key)
+        {
+            var link = entry;
+            while (link != -1) // while there is still next element in overflow chain
             {
-                while (link != -1) // while there is still next element in overflow chain
+                var rec = MainReader.ReadEntry(link);
+                if (rec.Item1.Key == key)
                 {
-                    var rec = MainReader.ReadEntry(link);
-                    if (rec.Item1.Key == key)
-                    {
-                        return new Tuple<bool, long, long>(true, MainReader.LastPage.Address, MainReader.LastRecordNumber);
-                    }
-                    if (rec.Item1.Key < key && rec.Item2 != -1) // go deeper
-                    {
-                        link = rec.Item2;
-                    }
+                    return new Tuple<bool, long, long>(true, MainReader.LastPage.Address,
+                        MainReader.LastRecordNumber);
+                }
+                if (rec.Item1.Key < key && rec.Item2 != -1) // go deeper
+                {
+                    link = rec.Item2;
+                }
+                else
+                {
+                    return new Tuple<bool, long, long>(false, -1, -1); // not found
                 }
             }
             return new Tuple<bool, long, long>(false, -1, -1); // not found
@@ -238,27 +246,51 @@ namespace ISAM
                 //add to overflow and link
                 if (key < newPage.Entries.Last().Item1.Key)
                 {
-                    //todo
+                    
                     //find a record to which link new record from overflow
                     int linkedRecordNumber = newPage.Entries.Count - 1;
                     long linkAddress = 0;
+                    var mainPageWithLink = newPage;
 
                     for (; linkedRecordNumber >= 0; linkedRecordNumber--)
-                        if (newPage.Entries[linkedRecordNumber].Item1.Key < key)
+                        if (mainPageWithLink.Entries[linkedRecordNumber].Item1.Key < key)
                             break;
 
+                    if (mainPageWithLink.Entries[linkedRecordNumber].Item2 != -1) // if a record in primary area already has pointer to overflow
+                    {
+                        while (true) // ????
+                        {
+                            var id = mainPageWithLink.Entries[linkedRecordNumber].Item2;
+                            if (id == -1)
+                                break;
+                            var newEntry = MainReader.ReadEntry(id);
+                            mainPageWithLink = MainReader.LastPage;
+                        }
+
+                    }
+
                     MainReader.Reader.Position = OverflowAddress;
-                    var overflowPage = MainReader.ReadNextPage();
+                    var overflowPage = MainReader.ReadNextPage(); // read next page from overflow area
+
+                    while (overflowPage!=null && overflowPage.Count >= MainPageSize) // find a page with enough space to place a new record
+                        overflowPage = MainReader.ReadNextPage();
+
+                    if (overflowPage == null)
+                    {
+                        Console.WriteLine("Error: no room for new record");
+                        return;
+                    }
+
                     if (overflowPage.Count < MainPageSize)
                     {
-                        overflowPage.Entries[(int)overflowPage.Count] = new Tuple<Record, long>(r, -1);
-                        linkAddress = overflowPage.Address*MainPageSize + overflowPage.Count;
+                        overflowPage.Entries[(int)overflowPage.Count] = new Tuple<Record, long>(r, mainPageWithLink.Entries[linkedRecordNumber].Item2);
+                        linkAddress = overflowPage.Address * MainPageSize + overflowPage.Count;
                         overflowPage.Count++;
                         Sort(overflowPage);
                         MainWriter.WritePage(overflowPage);
                     }
-                    newPage.Entries[linkedRecordNumber] = new Tuple<Record, long>(newPage.Entries[linkedRecordNumber].Item1, linkAddress);
-                    MainWriter.WritePage(newPage);
+                    mainPageWithLink.Entries[linkedRecordNumber] = new Tuple<Record, long>(mainPageWithLink.Entries[linkedRecordNumber].Item1, linkAddress);
+                    MainWriter.WritePage(mainPageWithLink);
 
                 }
                 else //add to new page
@@ -271,11 +303,22 @@ namespace ISAM
                         Sort(newPage);
                         MainWriter.WritePage(newPage);
                     }
-
-                    var newIndexPage = IndexReader.ReadPage(indexPage);
                     //todo add to index
                 }
             }
+        }
+
+        private Tuple<bool, long> FindRecordToLinkWith(long entry, long key)
+        {
+            var ent = entry;
+            Tuple<Record, long> item;
+            while ((item = MainReader.ReadEntry(ent)) != null)
+            {
+                
+            }
+
+            return new Tuple<bool, long>(false, -1);
+            
         }
 
         public void Remove(Record r)
@@ -327,7 +370,7 @@ namespace ISAM
             else
             {
                 sb.Append((entry.Item1.Key == long.MaxValue ? "-" : entry.Item1.ToString()) + " | " +
-                          (entry.Item2 == -1 ? "-" : entry.Item2.ToString()) + (entry.Item1.Deleted ? " [X]" : ""));
+                          (entry.Item2 == -1 ? "-" : "#"+entry.Item2) + (entry.Item1.Deleted ? " [X]" : ""));
 
             }
             return sb.ToString();
@@ -338,9 +381,8 @@ namespace ISAM
             using (var ir = new IndexReader(_indexPath, IndexPageSize, Mode.Read, false))
             {
                 Console.WriteLine("Entries per page: " + IndexPageSize);
-                var entry = 0L;
                 Tuple<long, long> i;
-                while ((i = ir.ReadEntry(entry++)) != null)
+                while ((i = ir.ReadNextEntry()) != null)
                 {
                     if (ir.LastPage.Count <= 0)
                         break;
@@ -354,6 +396,50 @@ namespace ISAM
 
         public void PrintMainFile()
         {
+            var mr = new MainReader(_filePath, MainPageSize, Mode.Read, false);
+            {
+                Console.WriteLine("Entries per page: " + MainPageSize);
+                var entry = 0L;
+                long countRecs = 0;
+                Tuple<Record, long> i;
+                while ((i = mr.ReadEntry(entry)) != null)
+                {
+                    if (mr.LastPage.Count <= 0 || mr.LastPage.Address >= OverflowAddress)
+                        break;
+                    if (countRecs >= MainPageSize)
+                    {
+                        countRecs = 0;
+                        Console.WriteLine();
+                    }
+                    else
+                    {
+                        countRecs++;
+                    }
+                    Console.WriteLine(EntryToString(i));
+
+                    if (i.Item2 != -1)
+                        FollowChain(i.Item2, ref mr);
+
+                    entry++;
+                }
+            }
+            mr.Dispose();
+        }
+        private void FollowChain(long address, ref MainReader mr)
+        {
+            var tmp = address;
+            string spacing = " ";
+            while (tmp != -1)
+            {
+                var i = mr.ReadEntry(tmp);
+                Console.WriteLine(spacing + (i.Item1.Key == long.MaxValue ? "-" : i.Item1 + " | " +
+                              (i.Item2 == -1 ? "-" : i.Item2.ToString())) + (i.Item1.Deleted ? " [X]" : ""));
+                spacing += " ";
+                tmp = i.Item2;
+            }
+        }
+        public void PrintAllMainFile()
+        {
             using (var mr = new MainReader(_filePath, MainPageSize, Mode.Read, false))
             {
                 Console.WriteLine("Entries per page: " + MainPageSize);
@@ -361,31 +447,16 @@ namespace ISAM
                 Tuple<Record, long> i;
                 while ((i = mr.ReadEntry(entry)) != null)
                 {
-                    if (mr.LastPage.Count <= 0 || mr.LastPage.Address >= OverflowAddress)
+                    if (mr.LastPage.Count <= 0)
                         break;
                     Console.WriteLine(EntryToString(i));
-
-                    if (i.Item2 != -1)
-                        FollowChain(i.Item2);
 
                     entry++;
                 }
             }
         }
 
-        private void FollowChain(long address)
-        {
-            var tmp = address;
-            string spacing = " ";
-            while (tmp != -1)
-            {
-                var i = MainReader.ReadEntry(tmp);
-                Console.WriteLine(spacing + (i.Item1.Key == long.MaxValue ? "-" : i.Item1 + " | " +
-                              (i.Item2 == -1 ? "-" : i.Item2.ToString())));
-                spacing += " ";
-                tmp = i.Item2;
-            }
-        }
+
 
         //todo
         public void Reorganize()
@@ -393,9 +464,14 @@ namespace ISAM
 
         }
 
+        private void AllocateEmptyPage()
+        {
+            MainWriter.Writer.Position = MainWriter.Writer.Length;
+            var page = new FilePage {Address = MainReader.PageNumberFromAddress(MainWriter.Writer.Position)};
+            MainWriter.WritePage(page);
+        }
 
-
-        public void Sort(FilePage fp)
+        private void Sort(FilePage fp)
         {
             fp.Entries.Sort((x, y) => x.Item1.Key.CompareTo(y.Item1.Key));
         }

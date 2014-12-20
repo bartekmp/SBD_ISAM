@@ -18,6 +18,7 @@ namespace ISAM
         private string _path;
         private int _pageSize;
         private bool _eof = false, _count = true;
+        private long _counter = 0;
         private int _pageSizeInBytes { get { return _pageSize * 41 + 8;  } }
         public long PageByteAddress(long page)
         {
@@ -57,6 +58,10 @@ namespace ISAM
             {
                 Reader.Position = PageByteAddress(page);
                 int bytesRead = Reader.Read(buffer, 0, _pageSizeInBytes);
+                if (bytesRead <= 0)
+                {
+                    return null;
+                }
                 if (bytesRead < _pageSizeInBytes)
                 {
                     _eof = true;
@@ -91,6 +96,10 @@ namespace ISAM
             {
                 var page = PageNumberFromAddress(Reader.Position);
                 int bytesRead = Reader.Read(buffer, 0, _pageSizeInBytes);
+                if (bytesRead <= 0)
+                {
+                    return null;
+                }
                 if (bytesRead < _pageSizeInBytes)
                 {
                     _eof = true;
@@ -148,7 +157,36 @@ namespace ISAM
             }
             return returning;
         }
+        public Tuple<Record, long> ReadNextEntry()
+        {
+            long page = _counter / _pageSize;
+            int offset = (int)(_counter++ % _pageSize);
+            if (page == LastPageNumber)
+            {
+                LastRecordNumber = offset;
+                var ret = LastPage.Entries[offset];
+                if (ret.Item2 != -1)
+                    NextRecordNumber = ret.Item2;
+                else
+                {
+                    NextRecordNumber = -1;
+                }
+                return ret;
+            }
+            var newPage = ReadPage(page);
+            if (newPage == null)
+                return null;
 
+            LastRecordNumber = offset;
+            var returning = newPage.Entries[offset];
+            if (returning.Item2 != -1)
+                NextRecordNumber = returning.Item2;
+            else
+            {
+                NextRecordNumber = -1;
+            }
+            return returning;
+        }
         private FilePage PageFromBytes(byte[] arr)
         {
             var page = new FilePage {Count = BitConverter.ToInt64(arr, 0)};

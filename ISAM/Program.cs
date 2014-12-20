@@ -63,6 +63,10 @@ namespace ISAM
                         if (index != null)
                             index.PrintMainFile();
                         break;
+                    case "PA":
+                        if (index != null)
+                            index.PrintAllMainFile();
+                        break;
                     default:
                         Console.WriteLine("Bad command, try again!");
                         break;
