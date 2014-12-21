@@ -16,16 +16,16 @@ namespace ISAM
         public long LastRecordNumber = -1L;
         public long NextRecordNumber = -1L;
         private string _path;
-        private int _pageSize;
+        private static int _pageSize;
         private bool _eof = false, _count = true;
         private long _counter = 0;
-        private int _pageSizeInBytes { get { return _pageSize * 41 + 8;  } }
-        public long PageByteAddress(long page)
+        private static int _pageSizeInBytes { get { return _pageSize * 41 + 8;  } }
+        public static long PageByteAddress(long page)
         {
             return page * (_pageSize * 41 + 8);
         }
 
-        public long PageNumberFromAddress(long address)
+        public static long PageNumberFromAddress(long address)
         {
             return address/(_pageSize*41 + 8);
         }
@@ -88,6 +88,8 @@ namespace ISAM
                 return null;
             }
         }
+
+
 
         public FilePage ReadNextPage()
         {
@@ -160,6 +162,42 @@ namespace ISAM
         public Tuple<Record, long> ReadNextEntry()
         {
             long page = _counter / _pageSize;
+            int offset = (int)(_counter++ % _pageSize);
+            if (page == LastPageNumber)
+            {
+                LastRecordNumber = offset;
+                var ret = LastPage.Entries[offset];
+                if (ret.Item2 != -1)
+                    NextRecordNumber = ret.Item2;
+                else
+                {
+                    NextRecordNumber = -1;
+                }
+                return ret;
+            }
+            var newPage = ReadPage(page);
+            if (newPage == null)
+                return null;
+
+            LastRecordNumber = offset;
+            var returning = newPage.Entries[offset];
+            if (returning.Item2 != -1)
+                NextRecordNumber = returning.Item2;
+            else
+            {
+                NextRecordNumber = -1;
+            }
+            return returning;
+        }
+        public Tuple<Record, long> ReadNextEntryWithChaining()
+        {
+            if (NextRecordNumber != -1)
+            {
+                return ReadEntry(NextRecordNumber);
+            }
+            long page = _counter / _pageSize;
+            if (page == PageNumberFromAddress(Index.TempLong))
+                return null;
             int offset = (int)(_counter++ % _pageSize);
             if (page == LastPageNumber)
             {

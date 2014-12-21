@@ -38,6 +38,39 @@ namespace ISAM
 
         }
 
+        public IndexPage ReadWholeIndex()
+        {
+            var buffer = new byte[_pageSizeInBytes];
+            try
+            {
+                Reader.Position = 0;
+                int bytesRead = Reader.Read(buffer, 0, _pageSizeInBytes);
+                if (bytesRead < _pageSizeInBytes)
+                {
+                    _eof = true;
+                    return null;
+                    //throw new PageFaultException();
+                }
+                var tmpPage = PageFromBytes(buffer);
+                tmpPage.Address = 0;
+                if (_count)
+                {
+                    Program.IndexReads++;
+                }
+                LastPage = tmpPage;
+                LastPageNumber = 0;
+                return tmpPage;
+            }
+            catch (ArgumentException)
+            {
+                return null;
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+        }
+
         public IndexPage ReadPage(long page)
         {
             if (_eof)
@@ -64,7 +97,7 @@ namespace ISAM
                 tmpPage.Address = page;
                 if (_count)
                 {
-                    Program.MainReads++;
+                    Program.IndexReads++;
                 }
                 LastPage = tmpPage;
                 LastPageNumber = page;
@@ -96,7 +129,7 @@ namespace ISAM
                 tmpPage.Address = page;
                 if (_count)
                 {
-                    Program.MainReads++;
+                    Program.IndexReads++;
                 }
                 LastPage = tmpPage;
                 LastPageNumber = page;

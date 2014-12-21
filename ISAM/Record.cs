@@ -17,6 +17,8 @@ namespace ISAM
         private long _key;
         private bool _deleted;
 
+
+
         public static Record EmptyRecord()
         {
             var rec = new Record();
