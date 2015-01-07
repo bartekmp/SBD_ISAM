@@ -1,38 +1,19 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ISAM
 {
     public class Record
     {
-        public const int RecordSize = 4 * sizeof(long);
+        public const int RecordSize = 4*sizeof (long);
+        private readonly double _sum;
 
         private long _a;
         private long _b;
         private long _c;
-        private double _sum;
-        private long _key;
         private bool _deleted;
-
-
-
-        public static Record EmptyRecord()
-        {
-            var rec = new Record();
-            rec._key = long.MaxValue;
-            return rec;
-        }
-
-        public static IEnumerable<Record> EmptyArray(int count)
-        {
-            var arr = new Record[count];
-            for (int i = 0; i < arr.Length; i++)
-                arr[i] = EmptyRecord();
-            return arr;
-        }
+        private long _key;
 
 
         public Record(long key = 0, long a = 0, long b = 0, long c = 0, bool del = false)
@@ -50,9 +31,10 @@ namespace ISAM
             {
             }
         }
+
         public Record(IEnumerable<long> ieLongs)
         {
-            var a = ieLongs.ToArray();
+            long[] a = ieLongs.ToArray();
             try
             {
                 _a = a.ElementAt(1);
@@ -72,6 +54,7 @@ namespace ISAM
             {
             }
         }
+
         public long A
         {
             get { return _a; }
@@ -105,6 +88,21 @@ namespace ISAM
         {
             get { return _deleted; }
             set { _deleted = value; }
+        }
+
+        public static Record EmptyRecord()
+        {
+            var rec = new Record();
+            rec._key = long.MaxValue;
+            return rec;
+        }
+
+        public static IEnumerable<Record> EmptyArray(int count)
+        {
+            var arr = new Record[count];
+            for (int i = 0; i < arr.Length; i++)
+                arr[i] = EmptyRecord();
+            return arr;
         }
 
 
@@ -165,7 +163,7 @@ namespace ISAM
             if (ReferenceEquals(null, obj)) return false;
             if (ReferenceEquals(this, obj)) return true;
             if (obj.GetType() != GetType()) return false;
-            return Equals((Record)obj);
+            return Equals((Record) obj);
         }
 
         public override string ToString()
@@ -190,19 +188,19 @@ namespace ISAM
         /// <returns>sum of roots</returns>
         private double RootsSum()
         {
-            double Δ = _b * _b - 4 * _a * _c;
+            double Δ = _b*_b - 4*_a*_c;
             if (Δ < 0)
             {
                 throw new NegativeDeltaException("delta is negative");
             }
             if (Math.Abs(_a) < 1e-14)
-                return -_c / (double)_b;
-            return -_b / (double)_a;
+                return -_c/(double) _b;
+            return -_b/(double) _a;
         }
 
         public IEnumerable<long> AsLongs()
         {
-            return new[] { _key, _a, _b, _c };
+            return new[] {_key, _a, _b, _c};
         }
 
         public IEnumerable<byte> AsBytes()

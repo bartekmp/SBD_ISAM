@@ -2,24 +2,44 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ISAM
 {
     public class MainWriter : IDisposable
     {
-
-        public BufferedStream Writer;
+        private readonly bool _count = true;
+        private readonly int _pageSize;
         public FilePage LastPage;
+        public BufferedStream Writer;
+        private bool _eof;
         private long _lastPageNumber = -1L;
         private string _path;
-        private int _pageSize;
-        private bool _eof = false, _count = true;
-        private int _pageSizeInBytes { get { return _pageSize * 41 + 8; } }
+
+        public MainWriter(string path, int pageSize, Index.Mode m, bool count = true)
+        {
+            _path = path;
+            _pageSize = pageSize;
+            FileMode mode = m == Index.Mode.Read ? FileMode.Open : FileMode.Create;
+            Writer = new BufferedStream(new FileStream(_path, mode, FileAccess.ReadWrite, FileShare.ReadWrite),
+                _pageSizeInBytes);
+            _count = count;
+        }
+
+        private int _pageSizeInBytes
+        {
+            get { return _pageSize*41 + 8; }
+        }
+
+        public void Dispose()
+        {
+            Writer.Dispose();
+            Writer = null;
+            LastPage = null;
+        }
+
         private long PageByteAddress(long page)
         {
-            return page * (_pageSize * 41 + 8);
+            return page*(_pageSize*41 + 8);
         }
 
         public void Reset()
@@ -27,18 +47,6 @@ namespace ISAM
             LastPage = null;
             _lastPageNumber = -1;
             _eof = false;
-
-        }
-
-        public MainWriter(string path, int pageSize, Index.Mode m, bool count = true)
-        {
-            _path = path;
-            _pageSize = pageSize;
-            var mode = m == Index.Mode.Read ? FileMode.Open : FileMode.Create;
-            Writer = new BufferedStream(new FileStream(_path, mode, FileAccess.ReadWrite, FileShare.ReadWrite),
-                _pageSizeInBytes);
-            _count = count;
-
         }
 
         public void WritePage(FilePage filePage)
@@ -57,7 +65,7 @@ namespace ISAM
 
         private IEnumerable<byte> FilePageToBytes(FilePage fp)
         {
-            var cnt = BitConverter.GetBytes(fp.Count);
+            byte[] cnt = BitConverter.GetBytes(fp.Count);
             IEnumerable<byte> x = new Byte[0];
             x = x.Concat(cnt);
             for (int i = 0; i < _pageSize; ++i)
@@ -66,13 +74,6 @@ namespace ISAM
                 x = x.Concat(BitConverter.GetBytes(fp.Entries[i].Item2));
             }
             return x;
-        }
-
-        public void Dispose()
-        {
-            Writer.Dispose();
-            Writer = null;
-            LastPage = null;
         }
     }
 }

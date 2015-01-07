@@ -43,8 +43,6 @@
   <ItemGroup>
     <Compile Include="Exceptions.cs" />
     <Compile Include="Index.cs" />
-    <Compile Include="IndexReader.cs" />
-    <Compile Include="IndexWriter.cs" />
     <Compile Include="MainReader.cs" />
     <Compile Include="MainWriter.cs" />
     <Compile Include="Program.cs" />
